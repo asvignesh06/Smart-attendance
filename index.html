@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Attendance</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+  <script src=".static/script/student_db.js"></script> <!-- LINK TO YOUR DB -->
+  <style>
+    body { font-family: sans-serif; text-align: center; margin: 0; background: #f5f5f5; }
+    nav { background: #007bff; color: white; padding: 10px; display: flex; justify-content: space-between; }
+    nav button { margin-left: 10px; padding: 6px 12px; }
+    video { border: 2px solid #ccc; margin-top: 20px; width: 300px; }
+    table { margin: 20px auto; border-collapse: collapse; width: 80%; }
+    th, td { padding: 10px; border: 1px solid #888; }
+    #status { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <strong>Smart Attendance</strong>
+    <div>
+      <button onclick="location.reload()">Home</button>
+      <button onclick="alert('Logged out!')">Logout</button>
+    </div>
+  </nav>
+
+  <h2>Scan Student ID Card</h2>
+  <video id="video" autoplay></video><br>
+  <button onclick="captureAndScan()">📸 Scan ID Card</button>
+  <p id="status">Status: Waiting...</p>
+
+  <h3>Attendance Log</h3>
+  <table>
+    <thead>
+      <tr><th>Roll No</th><th>Name</th><th>Date & Time</th></tr>
+    </thead>
+    <tbody id="log-table-body"></tbody>
+  </table>
+
+  <canvas id="canvas" style="display: none;"></canvas>
+
+  <script>
+    const video = document.getElementById("video");
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => video.srcObject = stream)
+      .catch(err => alert("Camera error: " + err));
+
+    function captureAndScan() {
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+
+      document.getElementById("status").textContent = "🔍 Scanning...";
+
+      Tesseract.recognize(canvas, 'eng')
+        .then(result => {
+          const text = result.data.text;
+          const match = text.match(/roll\s*no[:\-]?\s*(\w+)/i);
+          if (match) {
+            const rollNo = match[1].toUpperCase();
+            if (student_db[rollNo]) {
+              const name = student_db[rollNo].name;
+              const dateTime = new Date().toLocaleString();
+              saveAttendance(rollNo, name, dateTime);
+              document.getElementById("status").textContent = `✅ Attendance marked for ${name} (${rollNo})`;
+            } else {
+              document.getElementById("status").textContent = `❌ Roll No ${rollNo} not found in database.`;
+            }
+          } else {
+            document.getElementById("status").textContent = "⚠️ Roll No not detected.";
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById("status").textContent = "❌ OCR failed.";
+        });
+    }
+
+    function saveAttendance(rollNo, name, dateTime) {
+      const data = JSON.parse(localStorage.getItem("attendance")) || [];
+      data.push({ rollNo, name, dateTime });
+      localStorage.setItem("attendance", JSON.stringify(data));
+      updateTable();
+    }
+
+    function updateTable() {
+      const data = JSON.parse(localStorage.getItem("attendance")) || [];
+      const tbody = document.getElementById("log-table-body");
+      tbody.innerHTML = "";
+      data.forEach(row => {
+        tbody.innerHTML += `<tr><td>${row.rollNo}</td><td>${row.name}</td><td>${row.dateTime}</td></tr>`;
+      });
+    }
+
+    updateTable();
+  </script>
+
+</body>
+</html>
